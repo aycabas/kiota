@@ -372,6 +372,11 @@ public class TypeScriptRefiner : CommonLanguageRefiner, ILanguageRefiner
         //serializer.AddParameter(param);
         //deserializer.AddParameter(param);
 
+        foreach (var codeUsing in modelClass.Usings.Where(x => x.Declaration.IsExternal)){
+
+            globalDeserializer.AddUsing(codeUsing);
+            globalSerializer.AddUsing(codeUsing);
+        }
 
         targetNS.AddFunction(globalDeserializer);
         targetNS.AddFunction(globalSerializer);
@@ -384,11 +389,21 @@ public class TypeScriptRefiner : CommonLanguageRefiner, ILanguageRefiner
 
         method.AddParameter(new CodeParameter
         {
-            Name = modelInterface.Name, // remove the interface suffix
+            Name = ReturnFinalInterfaceName(modelInterface.Name), // remove the interface suffix
             DefaultValue = "{}",
-            Type = new CodeType { Name = modelInterface.Name, TypeDefinition = modelInterface }
+            Type = new CodeType { Name = ReturnFinalInterfaceName(modelInterface.Name), TypeDefinition = modelInterface }
         });
 
+        codeFunction.AddUsing(new CodeUsing
+        {
+            Name = modelInterface.Parent.Name,
+            Declaration = new CodeType
+            {
+                Name = ReturnFinalInterfaceName(modelInterface.Name),
+                TypeDefinition = modelInterface
+            }
+
+        });
     }
 
 
@@ -502,6 +517,19 @@ public class TypeScriptRefiner : CommonLanguageRefiner, ILanguageRefiner
         else if (currentElement is CodeInterface modelInterface && modelInterface.IsOfKind(CodeInterfaceKind.Model) && modelInterface.Name.EndsWith(TemporaryInterfaceNameSuffix))
         {
             modelInterface.Name = ReturnFinalInterfaceName(modelInterface.Name);
+        }
+        else if (currentElement is CodeUsing codeUsing && codeUsing.Declaration.TypeDefinition is CodeInterface codeInterface)
+        {
+            codeUsing.Declaration.Name = ReturnFinalInterfaceName(codeInterface.Name);
+            codeInterface.Name = ReturnFinalInterfaceName(codeInterface.Name);
+        }
+        else if (currentElement is CodeFunction codeFunction && codeFunction.OriginalLocalMethod.IsOfKind(CodeMethodKind.Serializer, CodeMethodKind.Deserializer)) {
+
+            var param = codeFunction.OriginalLocalMethod.Parameters.FirstOrDefault(x => (x.Type as CodeType).TypeDefinition is CodeInterface);
+           
+            var paramInterface = (param.Type as CodeType).TypeDefinition as CodeInterface;
+            paramInterface.Name = ReturnFinalInterfaceName(paramInterface.Name);
+            param.Name = ReturnFinalInterfaceName(paramInterface.Name); 
         }
 
         CrawlTree(currentElement, x => RenameModelInterfacesAndClasses(x));
@@ -625,7 +653,7 @@ public class TypeScriptRefiner : CommonLanguageRefiner, ILanguageRefiner
 
         var props = classModelChildItems.OfType<CodeProperty>();
         var methods = classModelChildItems.OfType<CodeMethod>();
-        //ProcessModelClassDeclaration(modelClass, modelInterface, interfaceNamingCallback); Not needed anymore
+        ProcessModelClassDeclaration(modelClass, modelInterface, interfaceNamingCallback); 
         ProcessModelClassProperties(modelClass, modelInterface, props, interfaceNamingCallback);
         //ProcessModelClassMethods(modelClass, methods, interfaceNamingCallback);
 
@@ -652,10 +680,11 @@ public class TypeScriptRefiner : CommonLanguageRefiner, ILanguageRefiner
                 Name = parentInterfaceNS.Name,
                 Declaration = new CodeType
                 {
-                    Name = parentInterface.Name,
+                    Name = ReturnFinalInterfaceName(parentInterface.Name),
                     TypeDefinition = parentInterface,
                 },
             });
+            AddSuperInSerializerFunction(modelClass, baseClass);
         }
 
         foreach (var impl in modelClass.StartBlock.Implements)
@@ -668,12 +697,39 @@ public class TypeScriptRefiner : CommonLanguageRefiner, ILanguageRefiner
             });
 
             modelInterface.AddUsing(modelClass.Usings.FirstOrDefault(x => x.Name == impl.Name));
-            modelClass.StartBlock.RemoveImplements(impl);
+            //modelClass.StartBlock.RemoveImplements(impl);
         }
-        UpdateModelClassImplementationAndConstructor(modelClass, modelInterface);
+        //UpdateModelClassImplementationAndConstructor(modelClass, modelInterface);
 
     }
 
+    private static void AddSuperInSerializerFunction(CodeClass childClass, CodeClass parentClass)
+    {
+        var serializer = (childClass.Parent as CodeNamespace).FindChildByName<CodeFunction>($"{ModelSerializerPrefix}{childClass.Name.ToFirstCharacterUpperCase()}");
+        var deserializer = (childClass.Parent as CodeNamespace).FindChildByName<CodeFunction>($"{ModelDeserializerPrefix}{childClass.Name.ToFirstCharacterUpperCase()}");
+
+        var parentSerializer = (parentClass.Parent as CodeNamespace).FindChildByName<CodeFunction>($"{ModelSerializerPrefix}{parentClass.Name.ToFirstCharacterUpperCase()}");
+        var parentDeserializer = (parentClass.Parent as CodeNamespace).FindChildByName<CodeFunction>($"{ModelDeserializerPrefix}{parentClass.Name.ToFirstCharacterUpperCase()}");
+
+        serializer.AddUsing(new CodeUsing
+        {
+            Name = parentSerializer.Parent.Name,
+            Declaration = new CodeType { 
+                Name = parentSerializer.Name,
+                TypeDefinition = parentSerializer
+            }
+        });
+
+        deserializer.AddUsing(new CodeUsing
+        {
+            Name = parentDeserializer.Parent.Name,
+            Declaration = new CodeType
+            {
+                Name = parentDeserializer.Name,
+                TypeDefinition = parentDeserializer
+            }
+        });
+    }
 
     private static void UpdateModelClassImplementationAndConstructor(CodeClass modelClass, CodeInterface modelInterface)
     {
