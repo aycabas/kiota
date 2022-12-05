@@ -89,17 +89,17 @@ public class CodeFunctionWriter : BaseElementWriter<CodeFunction, TypeScriptConv
         //}
 
         writer.IncreaseIndent();
-        writer.WriteLine($"{undefinedPrefix}writer.{GetSerializationMethodName(codeProperty.Type)}(\"{codeProperty.SerializationName ?? codePropertyName}\", {modelParamName}.{codePropertyName});");
+        writer.WriteLine($"{undefinedPrefix}writer.{GetSerializationMethodName(codeProperty.Type, modelParamName)}(\"{codeProperty.SerializationName ?? codePropertyName}\", {modelParamName}.{codePropertyName});");
         writer.DecreaseIndent();
        
     }
 
-    private string GetSerializationMethodName(CodeTypeBase propType)
+    private string GetSerializationMethodName(CodeTypeBase propType, string modelParamName)
     {
         var propertyType = localConventions.TranslateType(propType);
         if (propType is CodeType currentType)
         {
-            var result = GetSerializationMethodNameForCodeType(currentType, propertyType);
+            var result = GetSerializationMethodNameForCodeType(currentType, propertyType,modelParamName);
             if (!String.IsNullOrWhiteSpace(result))
             {
                 return result;
@@ -108,11 +108,11 @@ public class CodeFunctionWriter : BaseElementWriter<CodeFunction, TypeScriptConv
         return propertyType switch
         {
             "string" or "boolean" or "number" or "Guid" or "Date" or "DateOnly" or "TimeOnly" or "Duration" => $"write{propertyType.ToFirstCharacterUpperCase()}Value",
-            _ => $"writeObjectValue<{propertyType.ToFirstCharacterUpperCase()}>",
+            _ => $"writeObjectValueFromMethod<{propertyType.ToFirstCharacterUpperCase()}>",
         };
     }
 
-    private static string GetSerializationMethodNameForCodeType(CodeType propType, string propertyType)
+    private static string GetSerializationMethodNameForCodeType(CodeType propType, string propertyType, string modelParamName)
     {
         var isCollection = propType.CollectionKind != CodeTypeBase.CodeTypeCollectionKind.None;
         if (propType.TypeDefinition is CodeEnum currentEnum)
@@ -122,7 +122,7 @@ public class CodeFunctionWriter : BaseElementWriter<CodeFunction, TypeScriptConv
             if (propType.TypeDefinition == null)
                 return $"writeCollectionOfPrimitiveValues<{propertyType.ToFirstCharacterLowerCase()}>";
             else
-                return $"writeCollectionOfObjectValues<{propertyType.ToFirstCharacterUpperCase()}>";
+                return $"writeCollectionOfObjectValuesFromMethod<{propertyType.ToFirstCharacterUpperCase()}>({propertyType.ToFirstCharacterLowerCase()},{modelParamName.ToFirstCharacterLowerCase()}.{propertyType.ToFirstCharacterLowerCase()},serializeInto{propertyType.ToFirstCharacterUpperCase} )";
         }
         return null;
     }
@@ -144,7 +144,6 @@ public class CodeFunctionWriter : BaseElementWriter<CodeFunction, TypeScriptConv
             {
                 writer.WriteLine($"...deserializeInto{inherits.Name.ToFirstCharacterUpperCase()}({param.Name.ToFirstCharacterLowerCase()}),");
             }
-        
 
             foreach (var otherProp in properties)
             {
