@@ -56,7 +56,7 @@ public class CodeFunctionWriter : BaseElementWriter<CodeFunction, TypeScriptConv
 
         if (inherits != null)
         {
-            writer.WriteLine($"serialize{inherits.TypeDefinition.Name.ToFirstCharacterUpperCase()}({param.Name.ToFirstCharacterLowerCase()})");
+            writer.WriteLine($"serialize{inherits.TypeDefinition.Name.ToFirstCharacterUpperCase()}(writer, {param.Name.ToFirstCharacterLowerCase()})");
         }
 
         foreach (var otherProp in codeInterface.Properties.Where(static x => x.Kind == CodePropertyKind.Custom && !x.ExistsInBaseType))
@@ -84,7 +84,7 @@ public class CodeFunctionWriter : BaseElementWriter<CodeFunction, TypeScriptConv
 
         if (serializationName == "writeObjectValueFromMethod" || serializationName == "writeCollectionOfObjectValuesFromMethod")
         {
-            writer.WriteLine($"writer.{serializationName}(\"{codePropertyName}\", {modelParamName}.{codePropertyName}, serialize{propertyTypeName});");
+            writer.WriteLine($"writer.{serializationName}(\"{codePropertyName}\", {modelParamName}.{codePropertyName} as any, serialize{propertyTypeName});");
         }
         else
         {
@@ -145,7 +145,7 @@ public class CodeFunctionWriter : BaseElementWriter<CodeFunction, TypeScriptConv
 
         foreach (var otherProp in properties)
         {
-            writer.WriteLine($"\"{otherProp.SerializationName.ToFirstCharacterLowerCase() ?? otherProp.Name.ToFirstCharacterLowerCase()}\": n => {{ {param.Name.ToFirstCharacterLowerCase()}.{otherProp.Name.ToFirstCharacterLowerCase()} = n.{GetDeserializationMethodName(otherProp.Type)}; }},");
+            writer.WriteLine($"\"{otherProp.SerializationName.ToFirstCharacterLowerCase() ?? otherProp.Name.ToFirstCharacterLowerCase()}\": n => {{ {param.Name.ToFirstCharacterLowerCase()}.{otherProp.Name.ToFirstCharacterLowerCase()} = n.{GetDeserializationMethodName(otherProp.Type)} as any ; }},");
         }
 
         writer.DecreaseIndent();
@@ -170,7 +170,7 @@ public class CodeFunctionWriter : BaseElementWriter<CodeFunction, TypeScriptConv
         return propertyType switch
         {
             "string" or "boolean" or "number" or "Guid" or "Date" or "DateOnly" or "TimeOnly" or "Duration" => $"get{propertyType.ToFirstCharacterUpperCase()}Value()",
-            _ => $"getObject(deserializeInto{(propType as CodeType).TypeDefinition.Name})()",
+            _ => $"getObject(deserializeInto{(propType as CodeType).TypeDefinition.Name})",
         };
     }
 

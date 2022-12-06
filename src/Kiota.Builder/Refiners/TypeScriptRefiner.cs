@@ -518,10 +518,17 @@ public class TypeScriptRefiner : CommonLanguageRefiner, ILanguageRefiner
         {
             modelInterface.Name = ReturnFinalInterfaceName(modelInterface.Name);
         }
-        else if (currentElement is CodeUsing codeUsing && codeUsing.Declaration.TypeDefinition is CodeInterface codeInterface)
+        else if (currentElement is CodeUsing codeUsing)
         {
-            codeUsing.Declaration.Name = ReturnFinalInterfaceName(codeInterface.Name);
-            codeInterface.Name = ReturnFinalInterfaceName(codeInterface.Name);
+            if (codeUsing.Declaration.TypeDefinition is CodeInterface codeInterface) {
+                codeUsing.Declaration.Name = ReturnFinalInterfaceName(codeInterface.Name);
+                codeInterface.Name = ReturnFinalInterfaceName(codeInterface.Name);
+            }
+            else if (codeUsing.Declaration.TypeDefinition is CodeClass codeClass && codeClass.Kind == CodeClassKind.Model)
+            {
+
+                (codeUsing.Parent as CodeClass).RemoveUsingsByDeclarationName(codeClass.Name);
+            }
         }
         else if (currentElement is CodeFunction codeFunction && codeFunction.OriginalLocalMethod.IsOfKind(CodeMethodKind.Serializer, CodeMethodKind.Deserializer)) {
 
@@ -561,13 +568,43 @@ public class TypeScriptRefiner : CommonLanguageRefiner, ILanguageRefiner
                 modelClass.IsOfKind(CodeClassKind.Model))
         {
             SetTypeAndAddUsing(CreateModelInterface(modelClass, interfaceNamingCallback), type, codeProperty);
+            
         }
         else if (currentElement is CodeMethod codeMethod && codeMethod.IsOfKind(CodeMethodKind.RequestExecutor, CodeMethodKind.RequestGenerator))
         {
             ProcessModelClassesAssociatedWithMethods(codeMethod, interfaceNamingCallback);
+
         }
 
         CrawlTree(currentElement, x => GenerateModelInterfaces(x, interfaceNamingCallback));
+    }
+
+
+    private static void AddSerializationUsingToRequestBuilder(CodeClass modelClass, CodeClass targetClass)
+    {
+        var serializer = (modelClass.Parent as CodeNamespace).FindChildByName<CodeFunction>($"{ModelSerializerPrefix}{modelClass.Name.ToFirstCharacterUpperCase()}");
+        var deserializer = (modelClass.Parent as CodeNamespace).FindChildByName<CodeFunction>($"{ModelDeserializerPrefix}{modelClass.Name.ToFirstCharacterUpperCase()}");
+
+        
+        targetClass.AddUsing(new CodeUsing
+         {
+             Name = serializer.Parent.Name,
+             Declaration = new CodeType
+             {
+                 Name = serializer.Name,
+                 TypeDefinition = serializer
+             }
+         });
+
+        targetClass.AddUsing(new CodeUsing
+         {
+             Name = deserializer.Parent.Name,
+             Declaration = new CodeType
+             {
+                 Name = deserializer.Name,
+                 TypeDefinition = deserializer
+             }
+         });
     }
 
     private static void ProcessModelClassesAssociatedWithMethods(CodeMethod codeMethod, Func<CodeClass, string> interfaceNamingCallback)
@@ -581,14 +618,16 @@ public class TypeScriptRefiner : CommonLanguageRefiner, ILanguageRefiner
             returnType.TypeDefinition is CodeClass returnClass &&
             returnClass.IsOfKind(CodeClassKind.Model) && parentClass != null && parentClass.Name != returnClass.Name)
         {
-            parentClass.AddUsing(new CodeUsing { Name = returnClass.Parent.Name, Declaration = new CodeType { Name = returnClass.Name, TypeDefinition = returnClass } });
+            AddSerializationUsingToRequestBuilder(returnClass, codeMethod.Parent as CodeClass);
+            // parentClass.AddUsing(new CodeUsing { Name = returnClass.Parent.Name, Declaration = new CodeType { Name = returnClass.Name, TypeDefinition = returnClass } });
 
         }
 
+   
         var requestBodyParam = codeMethod?.Parameters?.OfKind(CodeParameterKind.RequestBody);
         if (requestBodyParam != null && requestBodyParam.Type is CodeType paramType && paramType.TypeDefinition is CodeClass paramClass)
         {
-            SetTypeAndAddUsing(CreateModelInterface(paramType.TypeDefinition as CodeClass, interfaceNamingCallback), paramType, requestBodyParam);
+            //SetTypeAndAddUsing(CreateModelInterface(paramType.TypeDefinition as CodeClass, interfaceNamingCallback), paramType, requestBodyParam);
             if (parentClass != null && parentClass.Name != paramClass.Name)
             {
                 parentClass.AddUsing(new CodeUsing { Name = paramClass.Parent.Name, Declaration = new CodeType { Name = paramClass.Name, TypeDefinition = paramClass } });
@@ -623,6 +662,8 @@ public class TypeScriptRefiner : CommonLanguageRefiner, ILanguageRefiner
                     TypeDefinition = interfaceElement,
                 },
             });
+
+            targetClass.AddUsing();
         }
     }
     private static CodeInterface CreateModelInterface(CodeClass modelClass, Func<CodeClass, string> interfaceNamingCallback)

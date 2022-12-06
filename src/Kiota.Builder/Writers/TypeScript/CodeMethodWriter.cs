@@ -374,7 +374,7 @@ public class CodeMethodWriter : BaseElementWriter<CodeMethod, TypeScriptConventi
         var isStream = localConventions.StreamTypeName.Equals(returnType, StringComparison.OrdinalIgnoreCase);
         var returnTypeWithoutCollectionSymbol = GetReturnTypeWithoutCollectionSymbol(codeElement, returnType);
         var genericTypeForSendMethod = GetSendRequestMethodName(isVoid, isStream, codeElement.ReturnType.IsCollection, returnTypeWithoutCollectionSymbol);
-        var newFactoryParameter = GetTypeFactory(isVoid, isStream, returnTypeWithoutCollectionSymbol);
+        var newFactoryParameter = GetDeserializerTypeFactory(isVoid, isStream, returnTypeWithoutCollectionSymbol);
         var errorMappingVarName = "undefined";
         if (codeElement.ErrorMappings.Any())
         {
@@ -387,6 +387,7 @@ public class CodeMethodWriter : BaseElementWriter<CodeMethod, TypeScriptConventi
             }
             writer.CloseBlock("};");
         }
+        var deserializerName = (codeElement.ReturnType as CodeType)?.TypeDefinition != null ? $", deserializeInto{(codeElement.ReturnType as CodeType)?.TypeDefinition?.Name.ToFirstCharacterUpperCase()}": (codeElement.ReturnType!= null? $", \"{codeElement.ReturnType.Name}\"": string.Empty);
         writer.WriteLine($"return this.requestAdapter?.{genericTypeForSendMethod}(requestInfo,{newFactoryParameter} responseHandler, {errorMappingVarName}) ?? Promise.reject(new Error('request adapter is null'));");
     }
     private string GetReturnTypeWithoutCollectionSymbol(CodeMethod codeElement, string fullTypeName)
@@ -444,16 +445,20 @@ public class CodeMethodWriter : BaseElementWriter<CodeMethod, TypeScriptConventi
             var body = "";
             if (IsCodeClassOrInterface(requestBody.Type))
             {
+                var serializerName = $"serialize{(requestBody.Type as CodeType).TypeDefinition.Name.ToFirstCharacterUpperCase()}";
                 setMethodName = "setContentFromParsable";
-                writer.WriteLine($"const parsableBody = new {requestBody.Type.Name}{ModelClassSuffix}(body)");
-                body = "parsableBody";
+                //writer.WriteLine($"const parsableBody = new {requestBody.Type.Name}{ModelClassSuffix}(body)");
+                body = "body";
+                writer.WriteLine($"{RequestInfoVarName}.{setMethodName}(this.{requestAdapterProperty.Name.ToFirstCharacterLowerCase()}, \"{contentType}\", {body} as any, {serializerName});");
+               
             }
             else
             {
                 setMethodName = "setContentFromScalar";
                 body = $"{spreadOperator}{requestBody.Name}";
+                writer.WriteLine($"{RequestInfoVarName}.{setMethodName}(this.{requestAdapterProperty.Name.ToFirstCharacterLowerCase()}, \"{contentType}\", {body});");
             }
-            writer.WriteLine($"{RequestInfoVarName}.{setMethodName}(this.{requestAdapterProperty.Name.ToFirstCharacterLowerCase()}, \"{contentType}\", {body});");
+            
         }
     }
     private static string GetPropertyCall(CodeProperty property, string defaultValue) => property == null ? defaultValue : $"this.{property.Name}";
@@ -640,11 +645,11 @@ public class CodeMethodWriter : BaseElementWriter<CodeMethod, TypeScriptConventi
         }
         return null;
     }
-    private string GetTypeFactory(bool isVoid, bool isStream, string returnType)
+    private string GetDeserializerTypeFactory(bool isVoid, bool isStream, string returnType)
     {
         if (isVoid) return string.Empty;
         else if (isStream || conventions.IsPrimitiveType(returnType)) return $" \"{returnType}\",";
-        else return $" {GetFactoryMethodName(returnType)},";
+        else return $"deserializeInto{returnType},";
     }
     private string GetSendRequestMethodName(bool isVoid, bool isStream, bool isCollection, string returnType)
     {
