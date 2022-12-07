@@ -40,11 +40,11 @@ public class CodeFunctionWriter : BaseElementWriter<CodeFunction, TypeScriptConv
         {
             WriteSerializerMethod(codeElement, writer);
         }
-        else
-        {
-            CodeMethodWriter.WriteDefensiveStatements(codeElement.OriginalLocalMethod, writer);
-            WriteFactoryMethodBody(codeElement, returnType, writer);
-        }
+        //else
+        //{
+        //    CodeMethodWriter.WriteDefensiveStatements(codeElement.OriginalLocalMethod, writer);
+        //    WriteFactoryMethodBody(codeElement, returnType, writer);
+        //}
     }
 
     private void WriteSerializerMethod(CodeFunction codeElement, LanguageWriter writer)

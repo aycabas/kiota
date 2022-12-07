@@ -1,8 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.ComponentModel;
 using System.Linq;
-using System.Security.Cryptography.X509Certificates;
 using System.Threading;
 using System.Threading.Tasks;
 using Kiota.Builder.CodeDOM;
@@ -40,15 +38,15 @@ public class TypeScriptRefiner : CommonLanguageRefiner, ILanguageRefiner
             ReplaceBinaryByNativeType(generatedCode, "ArrayBuffer", null, isNullable: true);
             cancellationToken.ThrowIfCancellationRequested();
             ReplaceReservedNames(generatedCode, new TypeScriptReservedNamesProvider(), x => $"{x}_escaped");
-            AddGetterAndSetterMethods(generatedCode,
-                new() {
-                    CodePropertyKind.Custom,
-                    CodePropertyKind.AdditionalData,
-                },
-                _configuration.UsesBackingStore,
-                false,
-                string.Empty,
-                string.Empty);
+            //AddGetterAndSetterMethods(generatedCode,
+            //    new() {
+            //        CodePropertyKind.Custom,
+            //        CodePropertyKind.AdditionalData,
+            //    },
+            //    _configuration.UsesBackingStore,
+            //    false,
+            //    string.Empty,
+            //    string.Empty);
             AddConstructorsForDefaultValues(generatedCode, true);
             cancellationToken.ThrowIfCancellationRequested();
             var defaultConfiguration = new GenerationConfiguration();
@@ -620,9 +618,15 @@ public class TypeScriptRefiner : CommonLanguageRefiner, ILanguageRefiner
         {
             AddSerializationUsingToRequestBuilder(returnClass, codeMethod.Parent as CodeClass);
             // parentClass.AddUsing(new CodeUsing { Name = returnClass.Parent.Name, Declaration = new CodeType { Name = returnClass.Name, TypeDefinition = returnClass } });
+            var bodyType = codeMethod?.Parameters?.FirstOrDefault(x => x.Kind == CodeParameterKind.RequestBody);
 
+            if ( bodyType != null ) {
+                var bodyClass = (bodyType.Type as CodeType).TypeDefinition as CodeClass;
+                if ( bodyClass!=null && bodyClass!= returnClass) {
+                    AddSerializationUsingToRequestBuilder(bodyClass, codeMethod.Parent as CodeClass);
+                }
+            }
         }
-
    
         var requestBodyParam = codeMethod?.Parameters?.OfKind(CodeParameterKind.RequestBody);
         if (requestBodyParam != null && requestBodyParam.Type is CodeType paramType && paramType.TypeDefinition is CodeClass paramClass)

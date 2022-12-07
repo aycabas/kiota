@@ -73,11 +73,14 @@ public class CodeMethodWriter : BaseElementWriter<CodeMethod, TypeScriptConventi
                 WriteQueryParametersMapper(codeElement, parentClass, writer);
                 break;
             case CodeMethodKind.Factory:
-                throw new InvalidOperationException("Factory methods are implemented as functions in TypeScript");
+                // throw new InvalidOperationException("Factory methods are implemented as functions in TypeScript");
+                break;
             case CodeMethodKind.RawUrlConstructor:
-                throw new InvalidOperationException("RawUrlConstructor is not supported as typescript relies on union types.");
+                break;
+            //throw new InvalidOperationException("RawUrlConstructor is not supported as typescript relieeas on union types.");
             case CodeMethodKind.RequestBuilderBackwardCompatibility:
-                throw new InvalidOperationException("RequestBuilderBackwardCompatibility is not supported as the request builders are implemented by properties.");
+                break;
+            // throw new InvalidOperationException("RequestBuilderBackwardCompatibility is not supported as the request builders are implemented by properties.");
             default:
                 WriteDefaultMethodBody(codeElement, writer);
                 break;
@@ -375,20 +378,20 @@ public class CodeMethodWriter : BaseElementWriter<CodeMethod, TypeScriptConventi
         var returnTypeWithoutCollectionSymbol = GetReturnTypeWithoutCollectionSymbol(codeElement, returnType);
         var genericTypeForSendMethod = GetSendRequestMethodName(isVoid, isStream, codeElement.ReturnType.IsCollection, returnTypeWithoutCollectionSymbol);
         var newFactoryParameter = GetDeserializerTypeFactory(isVoid, isStream, returnTypeWithoutCollectionSymbol);
-        var errorMappingVarName = "undefined";
-        if (codeElement.ErrorMappings.Any())
-        {
-            errorMappingVarName = "errorMapping";
-            writer.WriteLine($"const {errorMappingVarName}: Record<string, ParsableFactory<Parsable>> = {{");
-            writer.IncreaseIndent();
-            foreach (var errorMapping in codeElement.ErrorMappings)
-            {
-                writer.WriteLine($"\"{errorMapping.Key.ToUpperInvariant()}\": {GetFactoryMethodName(errorMapping.Value.Name)},");
-            }
-            writer.CloseBlock("};");
-        }
+        //var errorMappingVarName = "undefined";
+        //if (codeElement.ErrorMappings.Any())
+        //{
+        //    errorMappingVarName = "errorMapping";
+        //    writer.WriteLine($"const {errorMappingVarName}: Record<string, ParsableFactory<Parsable>> = {{");
+        //    writer.IncreaseIndent();
+        //    foreach (var errorMapping in codeElement.ErrorMappings)
+        //    {
+        //        writer.WriteLine($"\"{errorMapping.Key.ToUpperInvariant()}\": {GetFactoryMethodName(errorMapping.Value.Name)},");
+        //    }
+        //    writer.CloseBlock("};");
+        //}
         var deserializerName = (codeElement.ReturnType as CodeType)?.TypeDefinition != null ? $", deserializeInto{(codeElement.ReturnType as CodeType)?.TypeDefinition?.Name.ToFirstCharacterUpperCase()}": (codeElement.ReturnType!= null? $", \"{codeElement.ReturnType.Name}\"": string.Empty);
-        writer.WriteLine($"return this.requestAdapter?.{genericTypeForSendMethod}(requestInfo,{newFactoryParameter} responseHandler, {errorMappingVarName}) ?? Promise.reject(new Error('request adapter is null'));");
+        writer.WriteLine($"return this.requestAdapter?.{genericTypeForSendMethod}(requestInfo,{newFactoryParameter} responseHandler, {{}}) ?? Promise.reject(new Error('request adapter is null'));");
     }
     private string GetReturnTypeWithoutCollectionSymbol(CodeMethod codeElement, string fullTypeName)
     {
