@@ -33,7 +33,6 @@ public class TypeScriptRefiner : CommonLanguageRefiner, ILanguageRefiner
                 CodeParameterKind.RequestConfiguration);
             cancellationToken.ThrowIfCancellationRequested();
             AddPropertiesAndMethodTypesImports(generatedCode, true, true, true);
-            AliasUsingsWithSameSymbol(generatedCode);
             AddParsableImplementsForModelClasses(generatedCode, "Parsable");
             ReplaceBinaryByNativeType(generatedCode, "ArrayBuffer", null, isNullable: true);
             cancellationToken.ThrowIfCancellationRequested();
@@ -55,7 +54,8 @@ public class TypeScriptRefiner : CommonLanguageRefiner, ILanguageRefiner
                 defaultConfiguration.Serializers,
                 new(StringComparer.OrdinalIgnoreCase) {
                     "@microsoft/kiota-serialization-json.JsonSerializationWriterFactory",
-                    "@microsoft/kiota-serialization-text.TextSerializationWriterFactory"
+                    "@microsoft/kiota-serialization-text.TextSerializationWriterFactory",
+                    "@microsoft/kiota-serialization-form.FormSerializationWriterFactory",
                 }
             );
             ReplaceDefaultDeserializationModules(
@@ -63,7 +63,8 @@ public class TypeScriptRefiner : CommonLanguageRefiner, ILanguageRefiner
                 defaultConfiguration.Deserializers,
                 new(StringComparer.OrdinalIgnoreCase) {
                     "@microsoft/kiota-serialization-json.JsonParseNodeFactory",
-                    "@microsoft/kiota-serialization-text.TextParseNodeFactory"
+                    "@microsoft/kiota-serialization-text.TextParseNodeFactory",
+                    "@microsoft/kiota-serialization-form.FormParseNodeFactory",
                 }
             );
             AddSerializationModulesImport(generatedCode,
@@ -117,34 +118,48 @@ public class TypeScriptRefiner : CommonLanguageRefiner, ILanguageRefiner
             ReplaceRequestConfigurationsQueryParamsWithInterfaces(generatedCode);
         }, cancellationToken);
     }
-
-    private static readonly CodeUsingDeclarationNameComparer usingComparer = new();
+    private static void AliasCollidingSymbols(IEnumerable<CodeUsing> usings, string currentSymbolName)
+    {
+        var duplicatedSymbolsUsings = usings.Where(static x => !x.IsExternal)
+                                                                .GroupBy(static x => x.Declaration.Name, StringComparer.OrdinalIgnoreCase)
+                                                                .Where(static x => x.DistinctBy(static y => y.Declaration.TypeDefinition.GetImmediateParentOfType<CodeNamespace>())
+                                                                                    .Count() > 1)
+                                                                .SelectMany(static x => x)
+                                                                .Union(usings
+                                                                        .Where(static x => !x.IsExternal)
+                                                                        .Where(x => x.Declaration
+                                                                                        .Name
+                                                                                        .Equals(currentSymbolName, StringComparison.OrdinalIgnoreCase)))
+                                                                .ToArray();
+        foreach (var usingElement in duplicatedSymbolsUsings)
+            usingElement.Alias = (usingElement.Declaration
+                                            .TypeDefinition
+                                            .GetImmediateParentOfType<CodeNamespace>()
+                                            .Name +
+                                usingElement.Declaration
+                                            .TypeDefinition
+                                            .Name)
+                                .GetNamespaceImportSymbol()
+                                .ToFirstCharacterUpperCase();
+    }
     private static void AliasUsingsWithSameSymbol(CodeElement currentElement)
     {
         if (currentElement is CodeClass currentClass &&
             currentClass.StartBlock is ClassDeclaration currentDeclaration &&
-            currentDeclaration.Usings.Any(x => !x.IsExternal))
+            currentDeclaration.Usings.Any(static x => !x.IsExternal))
         {
-            var duplicatedSymbolsUsings = currentDeclaration.Usings.Where(x => !x.IsExternal)
-                                                                    .Distinct(usingComparer)
-                                                                    .GroupBy(x => x.Declaration.Name, StringComparer.OrdinalIgnoreCase)
-                                                                    .Where(x => x.Count() > 1)
-                                                                    .SelectMany(x => x)
-                                                                    .Union(currentDeclaration
-                                                                            .Usings
-                                                                            .Where(x => !x.IsExternal)
-                                                                            .Where(x => x.Declaration
-                                                                                            .Name
-                                                                                            .Equals(currentClass.Name, StringComparison.OrdinalIgnoreCase)));
-            foreach (var usingElement in duplicatedSymbolsUsings)
-                usingElement.Alias = (usingElement.Declaration
-                                                .TypeDefinition
-                                                .GetImmediateParentOfType<CodeNamespace>()
-                                                .Name +
-                                    usingElement.Declaration
-                                                .TypeDefinition
-                                                .Name)
-                                    .GetNamespaceImportSymbol();
+            AliasCollidingSymbols(currentDeclaration.Usings, currentClass.Name);
+        }
+        else if (currentElement is CodeFunction currentFunction &&
+                    currentFunction.StartBlock is BlockDeclaration currentFunctionDeclaration &&
+                    currentFunctionDeclaration.Usings.Any(static x => !x.IsExternal))
+        {
+            AliasCollidingSymbols(currentFunctionDeclaration.Usings, currentFunction.Name);
+        } else if (currentElement is CodeInterface currentInterface && 
+                    currentInterface.StartBlock is InterfaceDeclaration interfaceDeclaration &&
+                    interfaceDeclaration.Usings.Any(static x => !x.IsExternal))
+        {
+            AliasCollidingSymbols(interfaceDeclaration.Usings, currentInterface.Name);
         }
         CrawlTree(currentElement, AliasUsingsWithSameSymbol);
     }
@@ -188,8 +203,8 @@ public class TypeScriptRefiner : CommonLanguageRefiner, ILanguageRefiner
             currentProperty.Type.Name = currentProperty.Type.Name[1..]; // removing the "I"
         else if (currentProperty.IsOfKind(CodePropertyKind.Options))
             currentProperty.Type.Name = "RequestOption[]";
-        else if (currentProperty.IsOfKind(CodePropertyKind.Headers))
-            currentProperty.Type.Name = "Record<string, string>";
+        else if(currentProperty.IsOfKind(CodePropertyKind.Headers))
+            currentProperty.Type.Name = "Record<string, string[]>";
         else if (currentProperty.IsOfKind(CodePropertyKind.AdditionalData))
         {
             currentProperty.Type.Name = "Record<string, unknown>";
@@ -203,7 +218,7 @@ public class TypeScriptRefiner : CommonLanguageRefiner, ILanguageRefiner
             if (!string.IsNullOrEmpty(currentProperty.DefaultValue))
                 currentProperty.DefaultValue = "{}";
         }
-        CorrectDateTypes(currentProperty.Parent as CodeClass, DateTypesReplacements, currentProperty.Type);
+        CorrectCoreTypes(currentProperty.Parent as CodeClass, DateTypesReplacements, currentProperty.Type);
     }
     private static void CorrectMethodType(CodeMethod currentMethod)
     {
@@ -227,9 +242,8 @@ public class TypeScriptRefiner : CommonLanguageRefiner, ILanguageRefiner
                 urlTplParams.Type is CodeType originalType)
             {
                 originalType.Name = "Record<string, unknown>";
-                urlTplParams.Description = "The raw url or the Url template parameters for the request.";
-                var unionType = new CodeUnionType
-                {
+                urlTplParams.Documentation.Description = "The raw url or the Url template parameters for the request.";
+                var unionType = new CodeUnionType {
                     Name = "rawUrlOrTemplateParameters",
                     IsNullable = true,
                 };
@@ -244,7 +258,7 @@ public class TypeScriptRefiner : CommonLanguageRefiner, ILanguageRefiner
         }
         else if (currentMethod.IsOfKind(CodeMethodKind.Factory) && currentMethod.Parameters.OfKind(CodeParameterKind.ParseNode) is CodeParameter parseNodeParam)
             parseNodeParam.Type.Name = parseNodeParam.Type.Name[1..];
-        CorrectDateTypes(currentMethod.Parent as CodeClass, DateTypesReplacements, currentMethod.Parameters
+        CorrectCoreTypes(currentMethod.Parent as CodeClass, DateTypesReplacements, currentMethod.Parameters
                                                 .Select(x => x.Type)
                                                 .Union(new[] { currentMethod.ReturnType })
                                                 .ToArray());
@@ -801,7 +815,7 @@ public class TypeScriptRefiner : CommonLanguageRefiner, ILanguageRefiner
                 Kind = CodeMethodKind.Constructor,
                 IsAsync = false,
                 IsStatic = false,
-                Description = $"Instantiates a new {modelClass.Name.ToFirstCharacterUpperCase()} and sets the default values.",
+               // Description = $"Instantiates a new {modelClass.Name.ToFirstCharacterUpperCase()} and sets the default values.",
                 Access = AccessModifier.Public,
             }).First();
 
