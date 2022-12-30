@@ -380,12 +380,12 @@ public class CodeMethodWriter : BaseElementWriter<CodeMethod, TypeScriptConventi
         var errorMappingVarName = "undefined";
         if(codeElement.ErrorMappings.Any()) {
             errorMappingVarName = "errorMapping";
-            writer.WriteLine($"const {errorMappingVarName}: Record<string, ParsableFactory<Parsable>> = {{");
+            writer.WriteLine($"const {errorMappingVarName} = {{");
             writer.IncreaseIndent();
             foreach(var errorMapping in codeElement.ErrorMappings) {
                 writer.WriteLine($"\"{errorMapping.Key.ToUpperInvariant()}\": {GetFactoryMethodName(errorMapping.Value, codeElement, writer)},");
             }
-            writer.CloseBlock("};");
+            writer.CloseBlock("} as Record<string, DeserializeMethod<Parsable>>;");
         }
         writer.WriteLine($"return this.requestAdapter?.{genericTypeForSendMethod}(requestInfo,{newFactoryParameter} responseHandler, {errorMappingVarName}) ?? Promise.reject(new Error('request adapter is null'));");
     }
@@ -599,7 +599,7 @@ public class CodeMethodWriter : BaseElementWriter<CodeMethod, TypeScriptConventi
     private string GetFactoryMethodName(CodeTypeBase targetClassType, CodeMethod currentElement, LanguageWriter writer) {
         var returnType = localConventions.GetTypeString(targetClassType, currentElement, false, writer);
         var targetClassName = localConventions.TranslateType(targetClassType);
-        var resultName = $"create{targetClassName.ToFirstCharacterUpperCase()}FromDiscriminatorValue";
+        var resultName = $"deserializeInto{targetClassName.ToFirstCharacterUpperCase()}";
         if (targetClassName.Equals(returnType, StringComparison.OrdinalIgnoreCase))
             return resultName;
         if (targetClassType is CodeType currentType &&

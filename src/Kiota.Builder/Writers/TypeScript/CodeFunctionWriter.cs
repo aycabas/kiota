@@ -40,11 +40,6 @@ public class CodeFunctionWriter : BaseElementWriter<CodeFunction, TypeScriptConv
         {
             WriteSerializerMethod(codeElement, writer);
         }
-        //else
-        //{
-        //    CodeMethodWriter.WriteDefensiveStatements(codeElement.OriginalLocalMethod, writer);
-        //    WriteFactoryMethodBody(codeElement, returnType, writer);
-        //}
     }
 
     private void WriteSerializerMethod(CodeFunction codeElement, LanguageWriter writer)
@@ -82,13 +77,17 @@ public class CodeFunctionWriter : BaseElementWriter<CodeFunction, TypeScriptConv
 
         var serializationName = GetSerializationMethodName(codeProperty.Type, modelParamName);
 
-        if (serializationName == "writeObjectValueFromMethod" || serializationName == "writeCollectionOfObjectValuesFromMethod")
+        if (serializationName == "writeObjectValue" || serializationName == "writeCollectionOfObjectValues")
         {
             writer.WriteLine($"writer.{serializationName}(\"{codePropertyName}\", {modelParamName}.{codePropertyName} as any, serialize{propertyTypeName});");
         }
         else
         {
-            writer.WriteLine($"writer.{serializationName}(\"{codeProperty.SerializationName ?? codePropertyName}\", {modelParamName}.{codePropertyName});");
+            if (!string.IsNullOrWhiteSpace(spreadOperator))
+            {
+                writer.WriteLine($"if({modelParamName}.{codePropertyName})");
+            }
+                writer.WriteLine($"writer.{serializationName}(\"{codeProperty.SerializationName ?? codePropertyName}\", {spreadOperator}{modelParamName}.{codePropertyName});");
         }
         writer.DecreaseIndent();
 
@@ -108,7 +107,7 @@ public class CodeFunctionWriter : BaseElementWriter<CodeFunction, TypeScriptConv
         return propertyType switch
         {
             "string" or "boolean" or "number" or "Guid" or "Date" or "DateOnly" or "TimeOnly" or "Duration" => $"write{propertyType.ToFirstCharacterUpperCase()}Value",
-            _ => $"writeObjectValueFromMethod",
+            _ => $"writeObjectValue",
         };
     }
 
@@ -122,7 +121,7 @@ public class CodeFunctionWriter : BaseElementWriter<CodeFunction, TypeScriptConv
             if (propType.TypeDefinition == null)
                 return $"writeCollectionOfPrimitiveValues<{propertyType.ToFirstCharacterLowerCase()}>";
             else
-                return $"writeCollectionOfObjectValuesFromMethod";
+                return $"writeCollectionOfObjectValues";
         }
         return null;
     }
@@ -165,12 +164,12 @@ public class CodeFunctionWriter : BaseElementWriter<CodeFunction, TypeScriptConv
                 if (currentType.TypeDefinition == null)
                     return $"getCollectionOfPrimitiveValues<{propertyType.ToFirstCharacterLowerCase()}>()";
                 else
-                    return $"getCollectionOfObjectValuesFromMethod(deserializeInto{propertyType.ToFirstCharacterUpperCase()})";
+                    return $"getCollectionOfObjectValues(deserializeInto{propertyType.ToFirstCharacterUpperCase()})";
         }
         return propertyType switch
         {
             "string" or "boolean" or "number" or "Guid" or "Date" or "DateOnly" or "TimeOnly" or "Duration" => $"get{propertyType.ToFirstCharacterUpperCase()}Value()",
-            _ => $"getObject(deserializeInto{(propType as CodeType).TypeDefinition.Name})",
+            _ => $"getObjectValue(deserializeInto{(propType as CodeType).TypeDefinition.Name})",
         };
     }
 

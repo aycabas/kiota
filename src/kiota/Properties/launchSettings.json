@@ -2,7 +2,7 @@
   "profiles": {
     "kiota": {
       "commandName": "Project",
-      "commandLineArgs": "generate -d https://raw.githubusercontent.com/microsoftgraph/msgraph-sdk-powershell/dev/openApiDocs/v1.0/Mail.yml  --language typescript -o C:\\Work\\Projects\\SDKS\\kiota-typescript\\packages\\test\\generatedCode --clean-output"
+      "commandLineArgs": "generate -d https://raw.githubusercontent.com/microsoftgraph/msgraph-metadata/master/openapi/v1.0/openapi.yaml  --language typescript -o C:\\Work\\Projects\\SDKS\\kiota-typescript\\packages\\test\\generatedCode --clean-output"
     }
   }
 }

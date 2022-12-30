@@ -112,11 +112,16 @@ public class TypeScriptRefiner : CommonLanguageRefiner, ILanguageRefiner
                 generatedCode
             );
 
+            AliasUsingsWithSameSymbol(generatedCode);
+            MapClassToInterface(generatedCode);
 
-            CreateSeparateSerializers(generatedCode);
-            AddModelsInterfaces(generatedCode);
-            ReplaceRequestConfigurationsQueryParamsWithInterfaces(generatedCode);
         }, cancellationToken);
+    }
+
+    private static void MapClassToInterface(CodeElement generatedCode){
+        CreateSeparateSerializers(generatedCode);
+        AddModelsInterfaces(generatedCode);
+        ReplaceRequestConfigurationsQueryParamsWithInterfaces(generatedCode);
     }
     private static void AliasCollidingSymbols(IEnumerable<CodeUsing> usings, string currentSymbolName)
     {
@@ -175,12 +180,14 @@ public class TypeScriptRefiner : CommonLanguageRefiner, ILanguageRefiner
             AbstractionsPackageName, "ResponseHandler"),
         new (x => x is CodeMethod method && method.IsOfKind(CodeMethodKind.Serializer),
             AbstractionsPackageName, "SerializationWriter"),
+        new (x => x is CodeMethod method && method.IsOfKind(CodeMethodKind.Factory),
+            AbstractionsPackageName, "DeserializeMethod"),
         new (x => x is CodeMethod method && method.IsOfKind(CodeMethodKind.Deserializer, CodeMethodKind.Factory),
             AbstractionsPackageName, "ParseNode"),
         new (x => x is CodeMethod method && method.IsOfKind(CodeMethodKind.Constructor, CodeMethodKind.ClientConstructor, CodeMethodKind.IndexerBackwardCompatibility),
             AbstractionsPackageName, "getPathParameters"),
         new (x => x is CodeMethod method && method.IsOfKind(CodeMethodKind.RequestExecutor),
-            AbstractionsPackageName, "Parsable", "ParsableFactory"),
+            AbstractionsPackageName, "Parsable", "DeserializeMethod"),
         new (x => x is CodeClass @class && @class.IsOfKind(CodeClassKind.Model),
             AbstractionsPackageName, "Parsable"),
         new (x => x is CodeClass @class && @class.IsOfKind(CodeClassKind.Model) && @class.Properties.Any(x => x.IsOfKind(CodePropertyKind.AdditionalData)),
@@ -641,6 +648,27 @@ public class TypeScriptRefiner : CommonLanguageRefiner, ILanguageRefiner
                 }
             }
         }
+        // add using of serialization builder
+        if (codeMethod.ErrorMappings.Any()) {
+            foreach (var errorMapping in codeMethod.ErrorMappings)
+            {
+                AddSerializationUsingToRequestBuilder((errorMapping.Value as CodeType).TypeDefinition as CodeClass, codeMethod.Parent as CodeClass);
+            }
+        }
+
+        if (codeMethod.IsOfKind(CodeMethodKind.RequestGenerator)) { 
+            var bodyType = codeMethod?.Parameters?.FirstOrDefault(x => x.Kind == CodeParameterKind.RequestBody);
+
+            if (bodyType != null)
+            {
+                var bodyClass = (bodyType.Type as CodeType).TypeDefinition as CodeClass;
+                if (bodyClass != null)
+                {
+                    AddSerializationUsingToRequestBuilder(bodyClass, codeMethod.Parent as CodeClass);
+                }
+            }
+        
+    }
    
         var requestBodyParam = codeMethod?.Parameters?.OfKind(CodeParameterKind.RequestBody);
         if (requestBodyParam != null && requestBodyParam.Type is CodeType paramType && paramType.TypeDefinition is CodeClass paramClass)
