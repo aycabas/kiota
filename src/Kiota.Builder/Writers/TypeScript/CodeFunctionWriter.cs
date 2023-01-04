@@ -35,8 +35,7 @@ public class CodeFunctionWriter : BaseElementWriter<CodeFunction, TypeScriptConv
         {
             WriteDeserializerMethod(codeElement, writer);
         }
-        else
-        if (codeMethod.Kind == CodeMethodKind.Serializer)
+        else if (codeMethod.Kind == CodeMethodKind.Serializer)
         {
             WriteSerializerMethod(codeElement, writer);
         }
@@ -56,6 +55,7 @@ public class CodeFunctionWriter : BaseElementWriter<CodeFunction, TypeScriptConv
 
         foreach (var otherProp in codeInterface.Properties.Where(static x => x.Kind == CodePropertyKind.Custom && !x.ExistsInBaseType))
         {
+           
             WritePropertySerializer(codeInterface.Name.ToFirstCharacterLowerCase(), otherProp, writer);
         }
 
@@ -67,19 +67,22 @@ public class CodeFunctionWriter : BaseElementWriter<CodeFunction, TypeScriptConv
     {
         return property.Type is CodeType cType && cType.IsCollection && cType.TypeDefinition is CodeEnum;
     }
+
     private void WritePropertySerializer(string modelParamName, CodeProperty codeProperty, LanguageWriter writer)
     {
         var isCollectionOfEnum = IsCodePropertyCollectionOfEnum(codeProperty);
         var spreadOperator = isCollectionOfEnum ? "..." : string.Empty;
         var codePropertyName = codeProperty.Name.ToFirstCharacterLowerCase();
+        
         var propertyTypeName = (codeProperty.Type as CodeType)?.TypeDefinition?.Name;
+        var propertyType = localConventions.GetTypeString(codeProperty.Type, codeProperty.Parent, false, writer);
         writer.IncreaseIndent();
 
         var serializationName = GetSerializationMethodName(codeProperty.Type, modelParamName);
 
         if (serializationName == "writeObjectValue" || serializationName == "writeCollectionOfObjectValues")
         {
-            writer.WriteLine($"writer.{serializationName}(\"{codePropertyName}\", {modelParamName}.{codePropertyName} as any, serialize{propertyTypeName});");
+            writer.WriteLine($"writer.{serializationName}(\"{codePropertyName}\", {modelParamName}.{codePropertyName} as any, serialize{propertyType});");
         }
         else
         {
@@ -87,7 +90,7 @@ public class CodeFunctionWriter : BaseElementWriter<CodeFunction, TypeScriptConv
             {
                 writer.WriteLine($"if({modelParamName}.{codePropertyName})");
             }
-                writer.WriteLine($"writer.{serializationName}(\"{codeProperty.SerializationName ?? codePropertyName}\", {spreadOperator}{modelParamName}.{codePropertyName});");
+            writer.WriteLine($"writer.{serializationName}(\"{codeProperty.SerializationName ?? codePropertyName}\", {spreadOperator}{modelParamName}.{codePropertyName});");
         }
         writer.DecreaseIndent();
 
@@ -144,7 +147,7 @@ public class CodeFunctionWriter : BaseElementWriter<CodeFunction, TypeScriptConv
 
         foreach (var otherProp in properties)
         {
-            writer.WriteLine($"\"{otherProp.SerializationName.ToFirstCharacterLowerCase() ?? otherProp.Name.ToFirstCharacterLowerCase()}\": n => {{ {param.Name.ToFirstCharacterLowerCase()}.{otherProp.Name.ToFirstCharacterLowerCase()} = n.{GetDeserializationMethodName(otherProp.Type)} as any ; }},");
+        writer.WriteLine($"\"{otherProp.SerializationName.ToFirstCharacterLowerCase() ?? otherProp.Name.ToFirstCharacterLowerCase()}\": n => {{ {param.Name.ToFirstCharacterLowerCase()}.{otherProp.Name.ToFirstCharacterLowerCase()} = n.{GetDeserializationMethodName(otherProp.Type)} as any ; }},");
         }
 
         writer.DecreaseIndent();
@@ -171,34 +174,5 @@ public class CodeFunctionWriter : BaseElementWriter<CodeFunction, TypeScriptConv
             "string" or "boolean" or "number" or "Guid" or "Date" or "DateOnly" or "TimeOnly" or "Duration" => $"get{propertyType.ToFirstCharacterUpperCase()}Value()",
             _ => $"getObjectValue(deserializeInto{(propType as CodeType).TypeDefinition.Name})",
         };
-    }
-
-    private void WriteFactoryMethodBody(CodeFunction codeElement, string returnType, LanguageWriter writer)
-    {
-        var parseNodeParameter = codeElement.OriginalLocalMethod.Parameters.OfKind(CodeParameterKind.ParseNode);
-        if (codeElement.OriginalMethodParentClass.DiscriminatorInformation.ShouldWriteDiscriminatorForInheritedType && parseNodeParameter != null)
-        {
-            writer.WriteLines($"const mappingValueNode = {parseNodeParameter.Name.ToFirstCharacterLowerCase()}.getChildNode(\"{codeElement.OriginalMethodParentClass.DiscriminatorInformation.DiscriminatorPropertyName}\");",
-                                "if (mappingValueNode) {");
-            writer.IncreaseIndent();
-            writer.WriteLines("const mappingValue = mappingValueNode.getStringValue();",
-                            "if (mappingValue) {");
-            writer.IncreaseIndent();
-
-            writer.WriteLine("switch (mappingValue) {");
-            writer.IncreaseIndent();
-            foreach(var mappedType in codeElement.OriginalMethodParentClass.DiscriminatorInformation.DiscriminatorMappings) {
-                var typeName = conventions.GetTypeString(mappedType.Value, codeElement, false, writer);
-                writer.WriteLine($"case \"{mappedType.Key}\":");
-                writer.IncreaseIndent();
-                writer.WriteLine($"return new {typeName.ToFirstCharacterUpperCase()}();");
-                writer.DecreaseIndent();
-            }
-            writer.CloseBlock();
-            writer.CloseBlock();
-            writer.CloseBlock();
-        }
-
-        writer.WriteLine($"return new {returnType.ToFirstCharacterUpperCase()}();");
     }
 }
