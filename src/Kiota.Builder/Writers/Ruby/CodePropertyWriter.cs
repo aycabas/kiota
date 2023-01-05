@@ -19,8 +19,14 @@ namespace Kiota.Builder.Writers.Ruby {
                     writer.DecreaseIndent();
                     writer.WriteLine("end");
                 break;
+                case CodePropertyKind.QueryParameter:
+                case CodePropertyKind.QueryParameters:
+                case CodePropertyKind.Headers:
+                case CodePropertyKind.Options:
+                    writer.WriteLine($"attr_accessor :{codeElement.Name.ToSnakeCase()}");
+                    break;
                 default:
-                    writer.WriteLine($"@{codeElement.Name.ToSnakeCase()}");
+                    writer.WriteLine($"@{codeElement.NamePrefix}{codeElement.Name.ToSnakeCase()}");
                 break;
             }
         }

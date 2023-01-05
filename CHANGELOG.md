@@ -11,6 +11,42 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+## [0.10.0] - 2023-01-04
+
+### Added
+
+- Added support for auto-registration of serializers in Ruby. [#478](https://github.com/microsoft/kiota/issues/478)
+- Added support for middleware infrastructure in Ruby. [#1650](https://github.com/microsoft/kiota/issues/1650)
+- Added support for query parameters names aliasing in Ruby. [#1664](https://github.com/microsoft/kiota/issues/1664)
+- Added support for vendor specific serialization in Ruby. [#1661](https://github.com/microsoft/kiota/issues/1661)
+- Added support for default properties values in Ruby. [#1725](https://github.com/microsoft/kiota/issues/1725)
+- Added support for discriminated types deserialization (inheritance) in Ruby. [#1652](https://github.com/microsoft/kiota/issues/1652)
+- Added support for error mapping in Ruby. [#1653](https://github.com/microsoft/kiota/issues/1653)
+- Added support for multi-valued request headers in Ruby. [#2054](https://github.com/microsoft/kiota/issues/2054)
+- Added support for composed types generation in Ruby.
+- Added missing get child node method in Ruby for deserialization.
+- Added declaration of module classes in Ruby.
+
+### Changed
+
+- Fixed container support for MacOS M1. [#1888](https://github.com/microsoft/kiota/issues/1888)
+- Fixed a bug where a missing baseURL would make search fail. [#2095](https://github.com/microsoft/kiota/issues/2095)
+- Fixed a bug in Ruby where the request adapter URL would be overwritten by the client defaults. [#1647](https://github.com/microsoft/kiota/issues/1647)
+- Replaced concurrent-ruby by Fibers in Ruby libraries to implement proper asynchronous execution of requests.
+- Replaced response_handler parameter by a request option in Ruby. [#1860](https://github.com/microsoft/kiota/issues/1860)
+- Fixed a bug where conversion of intersection types to wrappers would fail.
+- Fixed raw url initialization in Ruby.
+- Fixed a bug where subsequent indexers would fail to convert properly for languages not supporting indexers. [#1666](https://github.com/microsoft/kiota/issues/1666)
+- Fixed a bug where the ISO duration import would be incorrect in Ruby.
+- Fixed a bug where default middleware options would not be assigned in Ruby.
+- Fixed a bug where request options would not be mapped properly in Ruby.
+- Fixed a bug where the main module would be missing in Ruby and TypeScript.
+- Fixed a bug where class names could conflict with module names in Ruby.
+- Fixed a bug where modules listing would be not be deterministic in Ruby and TypeScript.
+- Moved Ruby libraries to their own repositories.
+- Fixed a regression where errors would be missing their parent types.
+- Fixed a regression where indexers replacement would fail.
+
 ## [0.9.0] - 2022-12-19
 
 ### Added

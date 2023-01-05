@@ -217,7 +217,9 @@ public class JavaLanguageRefinerTests {
             Name = "model",
             Kind = CodeClassKind.Model
         }).First();
-        var requestBuilder = root.AddClass(new CodeClass {
+        var collectionNS = root.AddNamespace("collection");
+        var itemsNs = collectionNS.AddNamespace($"{collectionNS.Name}.items");
+        var requestBuilder = itemsNs.AddClass(new CodeClass {
             Name = "requestBuilder",
             Kind = CodeClassKind.RequestBuilder
         }).First();
@@ -232,24 +234,29 @@ public class JavaLanguageRefinerTests {
         requestBuilder.SetIndexer(new CodeIndexer {
             Name = "idx",
             ReturnType = new CodeType {
-                Name = "model",
-                TypeDefinition = model,
+                Name = requestBuilder.Name,
+                TypeDefinition = requestBuilder,
+            },
+            IndexType = new CodeType {
+                Name = "string",
             },
         });
-        var collectionRequestBuilder = root.AddClass(new CodeClass {
-            Name = "CollectionRequestBUilder",
+        var collectionRequestBuilder = collectionNS.AddClass(new CodeClass {
+            Name = "CollectionRequestBuilder",
+            Kind = CodeClassKind.RequestBuilder,
         }).First();
         collectionRequestBuilder.AddProperty(new CodeProperty {
             Name = "collection",
+            Kind = CodePropertyKind.RequestBuilder,
             Type = new CodeType {
-                Name = "requestBuilder",
+                Name = requestBuilder.Name,
                 TypeDefinition = requestBuilder,
             },
         });
         await ILanguageRefiner.Refine(new GenerationConfiguration { Language = GenerationLanguage.Java }, root);
         Assert.Single(requestBuilder.Properties);
         Assert.Empty(requestBuilder.GetChildElements(true).OfType<CodeIndexer>());
-        Assert.Single(collectionRequestBuilder.Methods.Where(x => x.IsOfKind(CodeMethodKind.IndexerBackwardCompatibility)));
+        Assert.Single(collectionRequestBuilder.Methods.Where(static x => x.IsOfKind(CodeMethodKind.IndexerBackwardCompatibility)));
         Assert.Single(collectionRequestBuilder.Properties);
     }
     [Fact]

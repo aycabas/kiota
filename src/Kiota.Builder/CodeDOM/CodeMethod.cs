@@ -72,10 +72,9 @@ public class PagingInformation : ICloneable
 
 public class CodeMethod : CodeTerminalWithKind<CodeMethodKind>, ICloneable, IDocumentedElement
 {
-    public static CodeMethod FromIndexer(CodeIndexer originalIndexer, CodeClass indexerClass, string methodNameSuffix, bool parameterNullable)
+    public static CodeMethod FromIndexer(CodeIndexer originalIndexer, string methodNameSuffix, bool parameterNullable)
     {
         ArgumentNullException.ThrowIfNull(originalIndexer);
-        ArgumentNullException.ThrowIfNull(indexerClass);
         var method = new CodeMethod {
             IsAsync = false,
             IsStatic = false,
@@ -85,13 +84,10 @@ public class CodeMethod : CodeTerminalWithKind<CodeMethodKind>, ICloneable, IDoc
             Documentation = new () {
                 Description = originalIndexer.Documentation.Description,
             },
-            ReturnType = new CodeType {
-                IsNullable = false,
-                TypeDefinition = indexerClass,
-                Name = indexerClass.Name,
-            },
+            ReturnType = originalIndexer.ReturnType.Clone() as CodeTypeBase,
             OriginalIndexer = originalIndexer,
         };
+        method.ReturnType.IsNullable = false;
         var parameter = new CodeParameter {
             Name = "id",
             Optional = false,
@@ -99,12 +95,9 @@ public class CodeMethod : CodeTerminalWithKind<CodeMethodKind>, ICloneable, IDoc
             Documentation = new() {
                 Description = "Unique identifier of the item",
             },
-            Type = new CodeType {
-                Name = "String",
-                IsNullable = parameterNullable,
-                IsExternal = true,
-            },
+            Type = originalIndexer.IndexType.Clone() as CodeTypeBase,
         };
+        parameter.Type.IsNullable = parameterNullable;
         method.AddParameter(parameter);
         return method;
     }
@@ -114,8 +107,7 @@ public class CodeMethod : CodeTerminalWithKind<CodeMethodKind>, ICloneable, IDoc
     public HashSet<string> AcceptedResponseTypes {
         get
         {
-            if(acceptedResponseTypes == null)
-                acceptedResponseTypes = new(StringComparer.OrdinalIgnoreCase);
+            acceptedResponseTypes ??= new(StringComparer.OrdinalIgnoreCase);
             return acceptedResponseTypes;
         }
         set
@@ -132,7 +124,7 @@ public class CodeMethod : CodeTerminalWithKind<CodeMethodKind>, ICloneable, IDoc
     private readonly ConcurrentDictionary<string, CodeParameter> parameters = new ();
     public void RemoveParametersByKind(params CodeParameterKind[] kinds) {
         parameters.Where(p => p.Value.IsOfKind(kinds))
-                            .Select(x => x.Key)
+                            .Select(static x => x.Key)
                             .ToList()
                             .ForEach(x => parameters.Remove(x, out var _));
     }
