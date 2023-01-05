@@ -73,7 +73,7 @@ public class TypeScriptRefiner : CommonLanguageRefiner, ILanguageRefiner
                 generatedCode
             );
            
-            ReplaceReservedNames(generatedCode, new TypeScriptReservedNamesProvider(), x => $"{x}_escaped");
+            
             ChangeModelsAndSerializersStructure(generatedCode);
             AliasUsingsWithSameSymbol(generatedCode);
         }, cancellationToken);
@@ -86,6 +86,7 @@ public class TypeScriptRefiner : CommonLanguageRefiner, ILanguageRefiner
     /// <param name="generatedCode"></param>
     private static void ChangeModelsAndSerializersStructure(CodeElement generatedCode)
     {
+        ReplaceReservedNames(generatedCode, new TypeScriptReservedNamesProvider(), x => $"{x}_escaped");
         CreateSeparateSerializers(generatedCode);
         CreateInterfaceModels(generatedCode);
         ReplaceRequestConfigurationsQueryParamsWithInterfaces(generatedCode);
@@ -404,10 +405,11 @@ public class TypeScriptRefiner : CommonLanguageRefiner, ILanguageRefiner
     /// <param name="currentElement"></param>
     private static void RenameModelInterfacesAndRemoveClasses(CodeElement currentElement)
     {
-        if (currentElement is CodeClass currentClass && currentClass.IsOfKind(CodeClassKind.Model) && !currentClass.Name.EndsWith(FinalModelClassNameSuffix))
+        if (currentElement is CodeClass currentClass && currentClass.IsOfKind(CodeClassKind.Model))
         {
             var targetNS = currentClass.GetImmediateParentOfType<CodeNamespace>();
             var existing = targetNS.FindChildByName<CodeInterface>(currentClass.Name, false);
+            targetNS.RemoveChildElement(currentElement);
             if (existing != null)
                 return;
             targetNS.RemoveChildElement(currentElement);
@@ -425,7 +427,6 @@ public class TypeScriptRefiner : CommonLanguageRefiner, ILanguageRefiner
             }
             else if (codeUsing.Declaration.TypeDefinition is CodeClass codeClass && codeClass.Kind == CodeClassKind.Model)
             {
-
                 (codeUsing.Parent as CodeClass).RemoveUsingsByDeclarationName(codeClass.Name);
             }
         }

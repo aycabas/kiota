@@ -108,8 +108,17 @@ public class TypeScriptConventionService : CommonLanguageConventionService
             "integer" or "int64" or "float" or "double" or "byte" or "sbyte" or "decimal" => "number",
             "binary" or "Guid" => "string",
             "String" or "Object" or "Boolean" or "Void" or "string" or "object" or "boolean" or "void" => type.Name.ToFirstCharacterLowerCase(), // little casing hack
-            _ => (type.TypeDefinition?.Name ?? type.Name).ToFirstCharacterUpperCase() ?? "object",
+            _ => typeName(type) ?? "object",
         };
+    }
+
+    private string typeName(CodeType codeType)
+    {
+        if (codeType.TypeDefinition is CodeFunction) {
+            return codeType.TypeDefinition?.Name;
+        };
+
+        return (codeType.TypeDefinition?.Name ?? codeType.Name).ToFirstCharacterUpperCase();
     }
     #pragma warning disable CA1822 // Method should be static
     public bool IsPrimitiveType(string typeName) {
