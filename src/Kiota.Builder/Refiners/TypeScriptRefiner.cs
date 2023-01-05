@@ -72,8 +72,8 @@ public class TypeScriptRefiner : CommonLanguageRefiner, ILanguageRefiner
             AddQueryParameterMapperMethod(
                 generatedCode
             );
-           
-            
+
+            ReplaceReservedNames(generatedCode, new TypeScriptReservedNamesProvider(), x => $"{x}_escaped");
             ChangeModelsAndSerializersStructure(generatedCode);
             AliasUsingsWithSameSymbol(generatedCode);
         }, cancellationToken);
@@ -81,12 +81,11 @@ public class TypeScriptRefiner : CommonLanguageRefiner, ILanguageRefiner
 
     /// <summary>
     /// TypeScript generation outputs models as interfaces 
-    /// and serializers and deserializers as separate functions. 
+    /// and serializers and deserializers as javascript functions. 
     /// </summary>
     /// <param name="generatedCode"></param>
     private static void ChangeModelsAndSerializersStructure(CodeElement generatedCode)
     {
-        ReplaceReservedNames(generatedCode, new TypeScriptReservedNamesProvider(), x => $"{x}_escaped");
         CreateSeparateSerializers(generatedCode);
         CreateInterfaceModels(generatedCode);
         ReplaceRequestConfigurationsQueryParamsWithInterfaces(generatedCode);
@@ -335,6 +334,7 @@ public class TypeScriptRefiner : CommonLanguageRefiner, ILanguageRefiner
         var serializer = modelClass.Methods.FirstOrDefault(x => x.Kind == CodeMethodKind.Serializer);
 
         var deserializer = modelClass.Methods.FirstOrDefault(x => x.Kind == CodeMethodKind.Deserializer);
+
         serializer.IsStatic = true;
         deserializer.IsStatic = true;
 
@@ -357,7 +357,6 @@ public class TypeScriptRefiner : CommonLanguageRefiner, ILanguageRefiner
 
         targetNS.AddFunction(globalDeserializer);
         targetNS.AddFunction(globalSerializer);
-
     }
 
     private static void AddInterfaceParamToSerializer(CodeInterface modelInterface, CodeFunction codeFunction)
@@ -379,7 +378,6 @@ public class TypeScriptRefiner : CommonLanguageRefiner, ILanguageRefiner
                 Name = ReturnFinalInterfaceName(modelInterface.Name),
                 TypeDefinition = modelInterface
             }
-
         });
     }
 
@@ -468,7 +466,7 @@ public class TypeScriptRefiner : CommonLanguageRefiner, ILanguageRefiner
                 type.TypeDefinition is CodeClass modelClass &&
                 modelClass.IsOfKind(CodeClassKind.Model))
         {
-            SetTypeAndAddUsing(CreateModelInterface(modelClass, interfaceNamingCallback), type, codeProperty);
+            SetTypeAsModelInterface(CreateModelInterface(modelClass, interfaceNamingCallback), type);
 
         }
         else if (currentElement is CodeMethod codeMethod && codeMethod.IsOfKind(CodeMethodKind.RequestExecutor, CodeMethodKind.RequestGenerator))
@@ -555,7 +553,8 @@ public class TypeScriptRefiner : CommonLanguageRefiner, ILanguageRefiner
             }
         }
     }
-    private static void SetTypeAndAddUsing(CodeInterface interfaceElement, CodeType elemType, CodeElement targetElement)
+
+    private static void SetTypeAsModelInterface(CodeInterface interfaceElement, CodeType elemType)
     {
         if (interfaceElement.Name.EndsWith(TemporaryInterfaceNameSuffix))
         {
@@ -566,23 +565,8 @@ public class TypeScriptRefiner : CommonLanguageRefiner, ILanguageRefiner
             elemType.Name = interfaceElement.Name;
         }
         elemType.TypeDefinition = interfaceElement;
-        //var nameSpaceOfInterface = interfaceElement.GetImmediateParentOfType<CodeNamespace>();
-        //if (nameSpaceOfInterface != targetElement.GetImmediateParentOfType<CodeNamespace>())
-        //{
-        //    var targetClass = targetElement.GetImmediateParentOfType<CodeClass>();
-        //    if (targetClass.Parent is CodeClass parentClass)
-        //        targetClass = parentClass;
-        //    targetClass.AddUsing(new CodeUsing
-        //    {
-        //        Name = nameSpaceOfInterface.Name,
-        //        Declaration = new CodeType
-        //        {
-        //            Name = interfaceElement.Name,
-        //            TypeDefinition = interfaceElement,
-        //        },
-        //    });
-        //}
     }
+
     private static CodeInterface CreateModelInterface(CodeClass modelClass, Func<CodeClass, string> interfaceNamingCallback)
     {
         /*
@@ -613,7 +597,6 @@ public class TypeScriptRefiner : CommonLanguageRefiner, ILanguageRefiner
         var methods = classModelChildItems.OfType<CodeMethod>();
         ProcessModelClassDeclaration(modelClass, modelInterface, interfaceNamingCallback);
         ProcessModelClassProperties(modelClass, modelInterface, props, interfaceNamingCallback);
-        //ProcessModelClassMethods(modelClass, methods, interfaceNamingCallback);
 
         return modelInterface;
     }
@@ -695,44 +678,31 @@ public class TypeScriptRefiner : CommonLanguageRefiner, ILanguageRefiner
         }
     }
 
-    private static void SetUsingInSerializerForProperty(CodeFunction codeFunction, CodeClass property)
+    private static void SetUsingsOfPropertyInSerializationFunctions(string propertySerializerFunctionName, CodeFunction codeFunction, CodeClass property, Func<CodeClass, string> interfaceNamingCallback)
     {
-        var serializerName = $"{ModelSerializerPrefix}{property.Name.ToFirstCharacterUpperCase()}";
-
-        if (serializerName != codeFunction.Name)
+        if (propertySerializerFunctionName != codeFunction.Name)
         {
-            // check if function is not same as the prop
-            var serializer = (property.Parent as CodeNamespace).FindChildByName<CodeFunction>(serializerName);
+            var serializationFunction = (property.Parent as CodeNamespace).FindChildByName<CodeFunction>(propertySerializerFunctionName);
 
             codeFunction.AddUsing(new CodeUsing
             {
-                Name = serializer.Parent.Name,
+                Name = serializationFunction.Parent.Name,
                 Declaration = new CodeType
                 {
-                    Name = serializer.Name,
-                    TypeDefinition = serializer
+                    Name = serializationFunction.Name,
+                    TypeDefinition = serializationFunction
 
                 }
             });
-        }
-    }
 
-    private static void SetUsingInDeserializerForProperty(CodeFunction codeFunction, CodeClass property)
-    {
-        var deserializerName = $"{ModelDeserializerPrefix}{property.Name.ToFirstCharacterUpperCase()}";
-        // check if function is not same as the prop
-        if (deserializerName != codeFunction.Name)
-        {
-            var deserializer = (property.Parent as CodeNamespace).FindChildByName<CodeFunction>(deserializerName);
-
+            var interfaceProperty = CreateModelInterface(property, interfaceNamingCallback);
             codeFunction.AddUsing(new CodeUsing
             {
-                Name = deserializer.Parent.Name,
+                Name = interfaceProperty.Parent.Name,
                 Declaration = new CodeType
                 {
-                    Name = deserializer.Name,
-                    TypeDefinition = deserializer
-
+                    Name = interfaceProperty.Name,
+                    TypeDefinition = interfaceProperty
                 }
             });
 
@@ -761,21 +731,21 @@ public class TypeScriptRefiner : CommonLanguageRefiner, ILanguageRefiner
                     serializer.AddUsing(usingExternal);
                     deserializer.AddUsing(usingExternal);
                 }
-
             }
             else if (mProp.Type is CodeType propertyType && propertyType.TypeDefinition is CodeClass propertyClass)
             {
                 var interfaceTypeAndUsing = ReturnUpdatedModelInterfaceTypeAndUsing(propertyClass, propertyType, interfaceNamingCallback);
                 SetUsingInModelInterface(modelInterface, interfaceTypeAndUsing);
 
-                SetUsingInSerializerForProperty(serializer, propertyClass);
-                SetUsingInDeserializerForProperty(deserializer, propertyClass);
+                SetUsingsOfPropertyInSerializationFunctions($"{ModelSerializerPrefix}{propertyClass.Name.ToFirstCharacterUpperCase()}", serializer, propertyClass, interfaceNamingCallback);
+                SetUsingsOfPropertyInSerializationFunctions($"{ModelDeserializerPrefix}{propertyClass.Name.ToFirstCharacterUpperCase()}", deserializer, propertyClass, interfaceNamingCallback);
             }
 
             var newProperty = mProp.Clone() as CodeProperty;
             modelInterface.AddProperty(newProperty);
         }
     }
+
     private static (CodeInterface, CodeUsing) ReturnUpdatedModelInterfaceTypeAndUsing(CodeClass sourceClass, CodeType originalType, Func<CodeClass, string> interfaceNamingCallback)
     {
         var propertyInterfaceType = CreateModelInterface(sourceClass, interfaceNamingCallback);

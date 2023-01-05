@@ -301,15 +301,28 @@ public class TypeScriptLanguageRefinerTests {
             Name = "model",
             Kind = CodeClassKind.Model
         }).First();
-        var method = model.AddMethod(new CodeMethod {
+        model.AddMethod(new CodeMethod
+        {
+            IsStatic = true,
+            Kind = CodeMethodKind.Serializer
+        });
+
+        model.AddMethod(new CodeMethod
+        {
+            IsStatic = true,
+            Kind = CodeMethodKind.Deserializer
+        });
+        var codeProperty = model.AddProperty(new CodeProperty {
             Name = "method",
-            ReturnType = new CodeType {
-                Name = "DateTimeOffset"
+            Type = new CodeType {
+                Name = "DateTimeOffset",
+                IsExternal = true
             },
         }).First();
         await ILanguageRefiner.Refine(new GenerationConfiguration { Language = GenerationLanguage.TypeScript }, root);
-        Assert.NotEmpty(model.StartBlock.Usings);
-        Assert.Equal("Date", method.ReturnType.Name);
+        var modelInterface = root.FindChildByName<CodeInterface>("model");
+        Assert.NotEmpty(modelInterface.StartBlock.Usings);
+        Assert.Equal("Date", codeProperty.Type.Name);
     }
     [Fact]
     public async Task ReplacesDateOnlyByNativeType() {

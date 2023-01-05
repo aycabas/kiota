@@ -75,7 +75,7 @@ public class CodeFunctionWriter : BaseElementWriter<CodeFunction, TypeScriptConv
         var codePropertyName = codeProperty.Name.ToFirstCharacterLowerCase();
 
         var propertyTypeName = (codeProperty.Type as CodeType)?.TypeDefinition?.Name;
-        
+        var propType = localConventions.GetTypeString(codeProperty.Type, codeProperty.Parent, false);
         writer.IncreaseIndent();
 
         var serializationName = GetSerializationMethodName(codeProperty.Type, modelParamName);
@@ -83,7 +83,7 @@ public class CodeFunctionWriter : BaseElementWriter<CodeFunction, TypeScriptConv
         if (serializationName == "writeObjectValue" || serializationName == "writeCollectionOfObjectValues")
         {
             var serializeName = getSerializerAlias(codeProperty.Type as CodeType, codeFunction, $"serialize{propertyTypeName}");
-            writer.WriteLine($"writer.{serializationName}(\"{codePropertyName}\", {modelParamName}.{codePropertyName} as any, {serializeName});");
+            writer.WriteLine($"writer.{serializationName}<{propType}>(\"{codePropertyName}\", {modelParamName}.{codePropertyName}, {serializeName});");
         }
         else
         {
@@ -148,7 +148,7 @@ public class CodeFunctionWriter : BaseElementWriter<CodeFunction, TypeScriptConv
 
         foreach (var otherProp in properties)
         {
-            writer.WriteLine($"\"{otherProp.SerializationName.ToFirstCharacterLowerCase() ?? otherProp.Name.ToFirstCharacterLowerCase()}\": n => {{ {param.Name.ToFirstCharacterLowerCase()}.{otherProp.Name.ToFirstCharacterLowerCase()} = n.{GetDeserializationMethodName(otherProp.Type, codeElement)} as any ; }},");
+            writer.WriteLine($"\"{otherProp.SerializationName.ToFirstCharacterLowerCase() ?? otherProp.Name.ToFirstCharacterLowerCase()}\": n => {{ {param.Name.ToFirstCharacterLowerCase()}.{otherProp.Name.ToFirstCharacterLowerCase()} = n.{GetDeserializationMethodName(otherProp.Type, codeElement)}; }},");
         }
 
         writer.DecreaseIndent();
@@ -159,7 +159,7 @@ public class CodeFunctionWriter : BaseElementWriter<CodeFunction, TypeScriptConv
     private string GetDeserializationMethodName(CodeTypeBase propType, CodeFunction codeFunction)
     {
         var isCollection = propType.CollectionKind != CodeTypeBase.CodeTypeCollectionKind.None;
-        var propertyType = localConventions.TranslateType(propType);
+        var propertyType = localConventions.GetTypeString(propType, codeFunction, false);
         if (propType is CodeType currentType)
         {
             if (currentType.TypeDefinition is CodeEnum currentEnum)
@@ -170,29 +170,22 @@ public class CodeFunctionWriter : BaseElementWriter<CodeFunction, TypeScriptConv
                 else
                 {
                     var name = getSerializerAlias(propType as CodeType, codeFunction, $"deserializeInto{(propType as CodeType).TypeDefinition.Name}");
-                    return $"getCollectionOfObjectValues({name})";
+                    return $"getCollectionOfObjectValues<{propertyType}>({name})";
                 }
         }
-            return propertyType switch
-            {
-                "string" or "boolean" or "number" or "Guid" or "Date" or "DateOnly" or "TimeOnly" or "Duration" => $"get{propertyType.ToFirstCharacterUpperCase()}Value()",
-                _ => $"getObjectValue({getSerializerAlias(propType as CodeType, codeFunction, $"deserializeInto{(propType as CodeType).TypeDefinition.Name}")})",
-            };
-        }
-
-        private string getSerializerAlias(CodeType propType, CodeFunction codeFunction, string name)
+        return propertyType switch
         {
-            var s = name;
-            var des = (propType.TypeDefinition.Parent as CodeNamespace).FindChildByName<CodeFunction>(s);
-        var tr = localConventions.GetTypeString(new CodeType
-        {
-            TypeDefinition = des
-        }, codeFunction, false);
-
-        //Change this
-        //if(tr.StartsWith("deserialize")) {
-        //return tr.ToFirstCharacterLowerCase();
-        //}
-            return tr;
-        }
+            "string" or "boolean" or "number" or "Guid" or "Date" or "DateOnly" or "TimeOnly" or "Duration" => $"get{propertyType.ToFirstCharacterUpperCase()}Value()",
+            _ => $"getObjectValue<{propertyType}>({getSerializerAlias(propType as CodeType, codeFunction, $"deserializeInto{(propType as CodeType).TypeDefinition.Name}")})",
+        };
     }
+
+    private string getSerializerAlias(CodeType propType, CodeFunction codeFunction, string propertySerializerName)
+    {
+        var serializationFunction = (propType.TypeDefinition.Parent as CodeNamespace).FindChildByName<CodeFunction>(propertySerializerName);
+        return localConventions.GetTypeString(new CodeType
+        {
+            TypeDefinition = serializationFunction
+        }, codeFunction, false);
+    }
+}
